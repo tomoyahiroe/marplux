@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitFrontmatter, splitSlides, collectSections } from "./agenda.js";
+import { splitFrontmatter, splitSlides, collectSections, buildDeck } from "./agenda.js";
 
 describe("splitFrontmatter", () => {
   it("separates a leading --- block as frontmatter", () => {
@@ -142,5 +142,120 @@ describe("collectSections", () => {
   it("rejects an out-of-range headingLevel", () => {
     expect(() => collectSections(["## X"], { headingLevel: 0 })).toThrow(/headingLevel/);
     expect(() => collectSections(["## X"], { headingLevel: 7 })).toThrow(/headingLevel/);
+  });
+});
+
+const SAMPLE = `---
+marp: true
+theme: hogehoge
+---
+
+# Title
+
+---
+
+## Purpose
+
+body A
+
+---
+
+## Wrap-up
+
+body B
+
+---
+
+## Todo for Me
+
+<!-- agenda-skip -->
+
+note
+`;
+
+describe("buildDeck", () => {
+  it("inserts a recap slide before each heading (skip excluded)", () => {
+    const out = buildDeck(SAMPLE);
+    const autoCount = (out.match(/<!-- agenda-auto -->/g) ?? []).length;
+    expect(autoCount).toBe(2);
+  });
+
+  it("marks the current item is-active and others non-active", () => {
+    const out = buildDeck(SAMPLE);
+    const firstRecap = out.split("<!-- agenda-auto -->")[1] ?? "";
+    expect(firstRecap).toMatch(/<li class="is-active">Purpose<\/li>/);
+    expect(firstRecap).toMatch(/<li class="is-upcoming">Wrap-up<\/li>/);
+  });
+
+  it("marks passed items is-done", () => {
+    const out = buildDeck(SAMPLE);
+    const secondRecap = out.split("<!-- agenda-auto -->")[2] ?? "";
+    expect(secondRecap).toMatch(/<li class="is-done">Purpose<\/li>/);
+    expect(secondRecap).toMatch(/<li class="is-active">Wrap-up<\/li>/);
+  });
+
+  it("keeps skip sections out of the agenda list", () => {
+    const out = buildDeck(SAMPLE);
+    expect(out).not.toMatch(/<li[^>]*>Todo for Me<\/li>/);
+  });
+
+  it("renders each recap as a standalone slide with the agenda class", () => {
+    const out = buildDeck(SAMPLE);
+    expect(out).toMatch(/<!-- _class: agenda -->/);
+  });
+
+  it("preserves the frontmatter", () => {
+    const out = buildDeck(SAMPLE);
+    expect(out).toMatch(/^---\nmarp: true\ntheme: hogehoge\n---/);
+  });
+
+  it("expands an overview slide into the full list without emphasis", () => {
+    const input = `---
+marp: true
+---
+
+# T
+
+---
+
+<!-- agenda-overview -->
+
+---
+
+## Purpose
+
+A
+
+---
+
+## Wrap-up
+
+B
+`;
+    const out = buildDeck(input);
+    const overview = (out.split("<!-- agenda-overview -->")[1] ?? "").split("---")[0] ?? "";
+    expect(overview).toMatch(/<li>Purpose<\/li>/);
+    expect(overview).toMatch(/<li>Wrap-up<\/li>/);
+    expect(overview).not.toMatch(/is-active/);
+  });
+
+  it("is idempotent: building twice yields the same output", () => {
+    const once = buildDeck(SAMPLE);
+    const twice = buildDeck(once);
+    expect(twice).toBe(once);
+  });
+
+  it("is idempotent for overview slides too (no duplicate expansion)", () => {
+    const input = "---\nmarp: true\n---\n\n# T\n\n---\n\n<!-- agenda-overview -->\n\n---\n\n## Purpose\n\nA\n";
+    const twice = buildDeck(buildDeck(input));
+    expect((twice.match(/<!-- agenda-overview -->/g) ?? []).length).toBe(1);
+    expect((twice.match(/<li>Purpose<\/li>/g) ?? []).length).toBe(1);
+  });
+
+  it("honors a custom title and className", () => {
+    const out = buildDeck(SAMPLE, { title: "目次", className: "toc" });
+    expect(out).toMatch(/# 目次/);
+    expect(out).toMatch(/<!-- _class: toc -->/);
+    expect(out).toMatch(/<ol class="toc">/);
   });
 });

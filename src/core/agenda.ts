@@ -133,3 +133,69 @@ export function collectSections(slides: string[], options: AgendaOptions = {}): 
   });
   return sections;
 }
+
+/**
+ * Render a single agenda recap slide.
+ * @param activeIdx current position (0-based); -1 renders the overview
+ *   (every item, no emphasis).
+ */
+function renderAgendaSlide(titles: string[], activeIdx: number, opts: ResolvedOptions): string {
+  const items = titles
+    .map((title, i) => {
+      if (activeIdx < 0) return `<li>${title}</li>`;
+      const cls = i < activeIdx ? "is-done" : i === activeIdx ? "is-active" : "is-upcoming";
+      return `<li class="${cls}">${title}</li>`;
+    })
+    .join("\n");
+  // The overview's identity is carried by the overview marker itself, so it
+  // must NOT also get the auto marker — otherwise the idempotent rebuild
+  // filter (which strips auto slides) would delete it on the next build.
+  const marker = activeIdx < 0 ? opts.markers.overview : opts.markers.auto;
+  return [
+    `<!-- _class: ${opts.className} -->`,
+    marker,
+    "",
+    `# ${opts.title}`,
+    "",
+    `<ol class="${opts.className}">`,
+    items,
+    "</ol>",
+  ].join("\n");
+}
+
+/**
+ * Insert agenda recap slides into an author's plain Marp Markdown.
+ *
+ * - A recap slide is inserted right before each heading section.
+ * - An overview slide (carrying the overview marker) is replaced by the full
+ *   item list with no emphasis.
+ * - Previously auto-inserted slides are removed first, so the transform is
+ *   idempotent: building twice yields the same output as building once.
+ */
+export function buildDeck(input: string, options: AgendaOptions = {}): string {
+  const opts = resolveOptions(options);
+  const { frontmatter, body } = splitFrontmatter(input);
+  // Drop existing auto-inserted slides for idempotency.
+  const slides = splitSlides(body).filter((s) => !s.includes(opts.markers.auto));
+
+  const sections = collectSections(slides, options);
+  const titles = sections.map((s) => s.title);
+  const activeBySlide = new Map(sections.map((s, i) => [s.index, i]));
+
+  const out: string[] = [];
+  slides.forEach((slide, index) => {
+    if (slide.includes(opts.markers.overview)) {
+      out.push(renderAgendaSlide(titles, -1, opts));
+      return;
+    }
+    const active = activeBySlide.get(index);
+    if (active !== undefined) {
+      out.push(renderAgendaSlide(titles, active, opts));
+    }
+    out.push(slide);
+  });
+
+  const bodyOut = out.join("\n\n---\n\n");
+  if (frontmatter === null) return bodyOut;
+  return `---\n${frontmatter}\n---\n\n${bodyOut}\n`;
+}
