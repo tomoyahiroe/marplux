@@ -7,6 +7,9 @@
 //
 // Built incrementally, one function at a time, under strict TDD.
 
+/** Matches a standalone slide separator line (`---`, optional trailing space). */
+const SLIDE_SEPARATOR = /^---[ \t]*$/;
+
 export interface Frontmatter {
   frontmatter: string | null;
   body: string;
@@ -33,4 +36,24 @@ export function splitFrontmatter(input: string): Frontmatter {
   }
   // Opening `---` with no closing fence: treat as no frontmatter.
   return { frontmatter: null, body: input };
+}
+
+/**
+ * Split the body into slides on standalone `---` lines. Surrounding blank
+ * lines of each slide are trimmed.
+ */
+export function splitSlides(body: string): string[] {
+  const lines = body.split("\n");
+  const slides: string[] = [];
+  let current: string[] = [];
+  for (const line of lines) {
+    if (SLIDE_SEPARATOR.test(line)) {
+      slides.push(current.join("\n").trim());
+      current = [];
+    } else {
+      current.push(line);
+    }
+  }
+  slides.push(current.join("\n").trim());
+  return slides;
 }
