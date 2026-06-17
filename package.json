@@ -1,6 +1,6 @@
 {
   "name": "marplux",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A tiny, zero-dependency CLI that augments Marp decks — starting with auto-inserted agenda recap slides before each heading.",
   "keywords": [
     "marp",
@@ -34,7 +34,9 @@
     "pnpm": "10.27.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "scripts": {
     "build": "tsup",
