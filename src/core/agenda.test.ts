@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitFrontmatter, splitSlides } from "./agenda.js";
+import { splitFrontmatter, splitSlides, collectSections } from "./agenda.js";
 
 describe("splitFrontmatter", () => {
   it("separates a leading --- block as frontmatter", () => {
@@ -89,5 +89,58 @@ describe("splitSlides", () => {
 
   it("returns a single empty slide for empty input", () => {
     expect(splitSlides("")).toEqual([""]);
+  });
+});
+
+describe("collectSections", () => {
+  it("collects level-2 headings in order with their slide index", () => {
+    const slides = ["# Title", "## Purpose", "WIP", "## Wrap-up"];
+    const sections = collectSections(slides);
+    expect(sections.map((s) => s.title)).toEqual(["Purpose", "Wrap-up"]);
+    expect(sections.map((s) => s.index)).toEqual([1, 3]);
+  });
+
+  it("excludes slides carrying the agenda-skip marker", () => {
+    const slides = ["## Purpose", "## Todo\n<!-- agenda-skip -->"];
+    expect(collectSections(slides).map((s) => s.title)).toEqual(["Purpose"]);
+  });
+
+  it("excludes already auto-generated recap slides", () => {
+    const slides = ["<!-- agenda-auto -->\n## Agenda", "## Purpose"];
+    expect(collectSections(slides).map((s) => s.title)).toEqual(["Purpose"]);
+  });
+
+  it("detects a heading even with leading comments or blank lines", () => {
+    const slides = ["<!-- foo -->\n\n## Goal"];
+    expect(collectSections(slides).map((s) => s.title)).toEqual(["Goal"]);
+  });
+
+  it("takes only the first heading of a slide", () => {
+    const slides = ["## First\n\nbody\n\n## Second"];
+    expect(collectSections(slides).map((s) => s.title)).toEqual(["First"]);
+  });
+
+  it("ignores other heading levels by default (## only)", () => {
+    const slides = ["# H1", "### H3", "## H2"];
+    expect(collectSections(slides).map((s) => s.title)).toEqual(["H2"]);
+  });
+
+  it("honors a custom headingLevel", () => {
+    const slides = ["## H2", "### H3a", "### H3b"];
+    const titles = collectSections(slides, { headingLevel: 3 }).map((s) => s.title);
+    expect(titles).toEqual(["H3a", "H3b"]);
+  });
+
+  it("honors custom skip markers", () => {
+    const slides = ["## Keep", "## Drop\n<!-- no-agenda -->"];
+    const titles = collectSections(slides, { markers: { skip: "<!-- no-agenda -->" } }).map(
+      (s) => s.title,
+    );
+    expect(titles).toEqual(["Keep"]);
+  });
+
+  it("rejects an out-of-range headingLevel", () => {
+    expect(() => collectSections(["## X"], { headingLevel: 0 })).toThrow(/headingLevel/);
+    expect(() => collectSections(["## X"], { headingLevel: 7 })).toThrow(/headingLevel/);
   });
 });
